@@ -44,7 +44,6 @@ struct Chunk {
     chunk_type: [u8; 4],
     chunk_data: ChunkData,
     crc: u32,
-    computed: u32,
 }
 
 #[derive(Debug)]
@@ -58,13 +57,13 @@ named!(header < &[u8] >,
 
 named!(ihdr < ChunkData >,
     do_parse!(
-        width: be_u32       >>
-        height: be_u32      >>
-        bit_depth: be_u8    >>
-        color_type: be_u8   >>
-        compression: be_u8  >>
-        filter: be_u8       >>
-        interlace: be_u8    >>
+        width: be_u32 >>
+        height: be_u32 >>
+        bit_depth: be_u8 >>
+        color_type: be_u8 >>
+        compression: be_u8 >>
+        filter: be_u8 >>
+        interlace: be_u8 >>
         (
             ChunkData::IHDR(
                 IHDR {
@@ -115,11 +114,13 @@ fn ztxt(input: &[u8], length: usize) -> ::nom::IResult<&[u8], ChunkData> {
     )
 }
 
+// TODO: Handle more chunk types,
+// TODO: Return error on failed crc check
 named!(chunk < Chunk >,
     do_parse!(
-        length: be_u32                  >>
-        chunk_type: peek!(take!(4))     >>
-        computed: peek!(take!(length + 4)) >>
+        length: be_u32 >>
+        chunk_type: peek!(take!(4)) >>
+        crc_data: peek!(take!(length + 4)) >>
         chunk_data: switch!(take!(4),
             b"IHDR" => call!(ihdr) |
             b"tEXt" => apply!(text, length as usize) |
@@ -130,8 +131,8 @@ named!(chunk < Chunk >,
                     ChunkData::UNKNOWN(data.into())
                 )
             )
-        )                               >>
-        crc: be_u32                     >>
+        ) >>
+        crc: be_u32 >>
         (
             Chunk {
                 chunk_type: [
@@ -142,7 +143,6 @@ named!(chunk < Chunk >,
                 ],
                 chunk_data: chunk_data,
                 crc,
-                computed: crc32::checksum_ieee(computed),
             }
         )
     )
@@ -150,8 +150,8 @@ named!(chunk < Chunk >,
 
 named!(png < PNG >,
     do_parse!(
-        call!(header)           >>
-        chunks: many1!(chunk)   >>
+        call!(header) >>
+        chunks: many1!(chunk) >>
         (PNG { chunks })
     )
 );
